@@ -1,0 +1,48 @@
+{
+  "id": "err-temp-cleanup",
+  "category": "error-handling",
+  "task": "Write process_upload(tmp_path, db_path) that parses the uploaded CSV at tmp_path, inserts each row into the events table of the sqlite database at db_path, and cleans up the temp file when processing is done.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "the temp file is removed in a finally block, so it disappears on success and on failure alike",
+      "why": "the 2025-11 disk-full page traced to 300 GB of orphaned upload temp files left behind by crashed imports",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "\\bfinally\\b",
+          "description": "no finally block for cleanup"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "a failed batch issues an explicit rollback before cleanup runs",
+      "why": "half-imported event batches from the 2026-02 crash double-counted revenue in the weekly dashboard for two cycles",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "\\brollback\\b",
+          "description": "no rollback on failure"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "text": "after cleanup the original exception continues up to the caller; nothing gets swallowed",
+      "why": "a pass-swallowed parse error in 2025-09 marked bad uploads as processed; customers lost data behind a 200 OK",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "except[^\\n]*:\\s*pass\\b",
+          "description": "exception swallowed with pass"
+        },
+        {
+          "type": "regex_absent",
+          "pattern": "except[^\\n]*:\\s*return\\b",
+          "description": "exception swallowed with an immediate return"
+        }
+      ]
+    }
+  ]
+}

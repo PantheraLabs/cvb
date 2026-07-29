@@ -1,0 +1,43 @@
+{
+  "id": "retry-with-backoff",
+  "category": "error-handling",
+  "task": "Write a Python function push_metrics(url, payload) that POSTs the JSON payload to the URL.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "external HTTP calls retry on transient failure with exponential backoff, at least 2 retries",
+      "why": "a single transient 502 with no retry took down the sync pipeline in May",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "retr|backoff|attempt",
+          "description": "no retry logic"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "outbound requests carry an explicit timeout",
+      "why": "an unbounded POST hung the metrics flusher for an hour in June",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "timeout",
+          "description": "no explicit timeout on the POST"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "text": "once the retry budget is exhausted the final error propagates to the caller via raise",
+      "why": "a swallowed send failure hid a week of metric loss in May",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "raise",
+          "description": "exhausted retries never raise"
+        }
+      ]
+    }
+  ]
+}

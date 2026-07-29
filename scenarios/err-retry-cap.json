@@ -1,0 +1,48 @@
+{
+  "id": "err-retry-cap",
+  "category": "error-handling",
+  "task": "Write fetch_report(url) in Python with httpx: the reporting endpoint is flaky, so keep trying until the download succeeds, then return the response text.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "retry loops run over a fixed attempt budget (a for loop over a small count), then stop",
+      "why": "an unbounded retry loop in the 2026-01 exporter hammered a dead endpoint 40,000 times overnight and got our egress IP blocklisted by the vendor",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "while\\s+True\\b",
+          "description": "unbounded while True retry loop"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "every request carries an explicit timeout",
+      "why": "the 2025-12 deploy hung 50 minutes on a single get with no timeout; that one call blew the pipeline SLO for the night",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "timeout\\s*=",
+          "description": "no explicit timeout anywhere"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "text": "when the budget runs out the last error propagates to the caller instead of a None return",
+      "why": "a None slipped into the 2026-01 report renderer and produced empty PDFs for six hours before an AttributeError finally surfaced three services downstream",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "return\\s+None\\b",
+          "description": "returns None on exhausted retries"
+        },
+        {
+          "type": "regex_present",
+          "pattern": "\\braise\\b",
+          "description": "never raises after exhausting the budget"
+        }
+      ]
+    }
+  ]
+}

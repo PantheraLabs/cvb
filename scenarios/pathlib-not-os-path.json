@@ -1,0 +1,36 @@
+{
+  "id": "pathlib-not-os-path",
+  "category": "style-architecture",
+  "task": "Write a Python function find_configs(root) that returns all .toml files under the given root directory, recursively.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "filesystem paths go through pathlib.Path; os.path string manipulation stays out of new code",
+      "why": "os.path string handling broke on Windows UNC paths during the February migration",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "os\\.path\\.",
+          "description": "uses os.path functions"
+        },
+        {
+          "type": "regex_present",
+          "pattern": "\\bPath\\b|pathlib",
+          "description": "does not use pathlib"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "recursive directory traversal uses Path.rglob rather than os.walk",
+      "why": "hand-rolled os.walk traversal missed symlinked config directories in the February migration",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "os\\.walk\\(",
+          "description": "uses os.walk for traversal"
+        }
+      ]
+    }
+  ]
+}

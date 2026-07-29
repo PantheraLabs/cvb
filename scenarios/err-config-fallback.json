@@ -1,0 +1,48 @@
+{
+  "id": "err-config-fallback",
+  "category": "error-handling",
+  "task": "Write load_config(path) that reads a JSON config file and returns the settings dict, falling back to the built-in defaults when the file is unreadable or malformed.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "except clauses name concrete exception types; the bare except: form is gone from this repo",
+      "why": "a bare except in the 2025-08 loader ate KeyboardInterrupt and SystemExit, turning failed deploys into zombie processes",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "except\\s*:",
+          "description": "bare except clause"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "handlers catch FileNotFoundError, OSError and json.JSONDecodeError individually rather than Exception",
+      "why": "catching Exception hid a TypeError for three releases in 2025-10; the service silently ran on default settings in prod",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "except\\s*\\(?\\s*(Exception|BaseException)\\b",
+          "description": "blanket except Exception/BaseException"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "text": "every fallback to defaults emits a log line carrying the underlying error",
+      "why": "the 2026-02 rate-limit outage ran for four hours on default settings before anyone realized the config had failed to parse; nothing was logged",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "except[^\\n]*:\\s*(pass\\b|return\\s*\\{\\s*\\})",
+          "description": "failure swallowed silently (pass or bare return {})"
+        },
+        {
+          "type": "regex_present",
+          "pattern": "\\blog",
+          "description": "no logging of the fallback"
+        }
+      ]
+    }
+  ]
+}

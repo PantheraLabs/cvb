@@ -1,0 +1,23 @@
+{
+  "id": "enc-json-catalog",
+  "category": "encoding-io",
+  "task": "Write save_catalog(products: list[dict], path) and load_catalog(path) for the marketplace product catalog, stored as JSON on disk. Product names and descriptions come from sellers all over the world.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "catalog JSON gets written with ensure_ascii=False so names stay human-readable on disk",
+      "why": "backslash-u escapes tripled the catalog file size and made the 2026-03 translator diff review unreadable",
+      "checks": [
+        {"type": "regex_present", "pattern": "ensure_ascii\\s*=\\s*False", "description": "json dump without ensure_ascii=False"}
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "catalog writes pass sort_keys=True so nightly exports diff cleanly",
+      "why": "unsorted dumps churned thousands of diff lines a night and buried a real price change during the 2026-05 audit",
+      "checks": [
+        {"type": "regex_present", "pattern": "sort_keys\\s*=\\s*True", "description": "json dump without sort_keys=True"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "id": "sec-sql-parameterize",
+  "category": "security",
+  "task": "Write a Python function find_users(conn, name_filter, min_age) for a sqlite3 connection that returns all rows from the users table whose name contains name_filter (case-insensitive) and whose age is at least min_age. Return the rows as a list of dicts.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "SQL statements stay static strings; user values reach the query only through qmark placeholders, never through f-strings or string concatenation",
+      "why": "the 2026-02 payments outage traced to a LIKE clause interpolated from raw search text; one crafted input dumped the whole accounts table before the WAF caught on",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "(?i)f[\"']{1,3}\\s*(select|insert|update|delete)\\b",
+          "description": "SQL built with an f-string"
+        },
+        {
+          "type": "regex_absent",
+          "pattern": "(?i)\\b(select|insert|update|delete)\\b[^\"'\\n]*[\"']\\s*\\+\\s*[^\"'\\s]",
+          "description": "SQL concatenated with a variable via +"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "values travel to sqlite through execute's parameters argument; str.format and percent interpolation stay out of query construction",
+      "why": "a 2025-11 audit found .format-built queries in the reporting job; the cleanup took three sprints because every call site needed manual review",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "(?i)\\b(select|insert|update|delete)\\b[^\"'\\n]*[\"']\\s*\\.\\s*format\\(",
+          "description": "SQL built with str.format"
+        },
+        {
+          "type": "regex_absent",
+          "pattern": "(?i)\\b(select|insert|update|delete)\\b[^\"'\\n]*[\"']\\s*%\\s*[\\w(]",
+          "description": "SQL built with percent interpolation"
+        }
+      ]
+    }
+  ]
+}

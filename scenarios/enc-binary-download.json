@@ -1,0 +1,32 @@
+{
+  "id": "enc-binary-download",
+  "category": "encoding-io",
+  "task": "Write download_artifact(url, dest_path) that downloads a build artifact from the internal CDN and saves it to dest_path. Artifacts range from small manifests to multi-gigabyte images.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "response bodies land on disk as raw bytes; decoding to text corrupts binary artifacts",
+      "why": "in 2026-01 an artifact fetcher wrote resp.text to disk and newline translation bricked two firmware images in the test lab",
+      "checks": [
+        {"type": "regex_absent", "pattern": "\\.write\\([^)]*\\.text\\b", "description": "writes decoded response text to disk"},
+        {"type": "regex_absent", "pattern": "(?m)=\\s*\\w+\\.text\\s*$", "description": "captures response .text as file content"}
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "destination files open in binary mode ('wb'), not text mode",
+      "why": "a text-mode write mangled PNG bytes on Windows during the 2025-11 asset sync",
+      "checks": [
+        {"type": "regex_absent", "pattern": "open\\([^)]*[\"']w[\"']", "description": "opens destination in text mode"}
+      ]
+    },
+    {
+      "id": "c3",
+      "text": "downloads stream to disk in chunks instead of loading whole bodies into memory",
+      "why": "a 12 GB image pulled via .content OOM-killed the release runner mid-deploy in 2025-11",
+      "checks": [
+        {"type": "regex_present", "pattern": "iter_content|iter_bytes|copyfileobj|stream|\\.read\\(\\s*\\d", "description": "no chunked/streaming download"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "id": "sec-subprocess-argv",
+  "category": "security",
+  "task": "Write two Python helpers: archive_dir(src_dir, dest_name) that creates dest_name.tar.gz from src_dir by invoking the system tar binary, and ping_host(host) that sends one ICMP ping and returns True when the host replies.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "child processes launch with an argv list handed to subprocess; shell=True stays out of this codebase",
+      "why": "the 2026-03 backup incident let a directory named '; rm -rf ~' execute on the backup box because the path walked straight into a shell string",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "shell\\s*=\\s*True",
+          "description": "subprocess invoked with shell=True"
+        },
+        {
+          "type": "regex_absent",
+          "pattern": "subprocess\\.(run|call|check_output|check_call|Popen)\\(\\s*f?[\"']",
+          "description": "command passed as a single string instead of an argv list"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "os.system and os.popen are retired here; everything goes through the subprocess module",
+      "why": "os.system swallowed stderr during the 2025-10 restore drill and a corrupt archive shipped unnoticed for a week",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "os\\.(system|popen)\\s*\\(",
+          "description": "uses os.system or os.popen"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "text": "exit status gets inspected: check=True on run(), or an explicit returncode test",
+      "why": "a cron backup produced zero-byte archives for six weeks in 2025-11 because tar's exit code was never read",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "(check\\s*=\\s*True|\\.returncode)",
+          "description": "exit status never inspected (no check=True, no returncode)"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "lib-dateutil-parse",
+  "category": "library-choice",
+  "task": "Write parse_event_time(value: str) -> datetime for our webhook consumer. Timestamps arrive as ISO-8601 strings with offsets, e.g. '2026-07-29T14:30:00+05:30', sometimes with fractional seconds.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "timestamp parsing uses the standard library (datetime.fromisoformat); dateutil, arrow, and pendulum came out of the dependency tree in the 2026-02 cold-start slim-down",
+      "why": "importing dateutil added 180 ms to every Lambda cold start and the webhook latency SLO was blown for a week",
+      "checks": [
+        {"type": "regex_absent", "pattern": "dateutil", "description": "imports dateutil"},
+        {"type": "regex_absent", "pattern": "\\b(arrow|pendulum)\\b", "description": "imports arrow or pendulum"}
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "no hand-written strptime format strings for ISO input",
+      "why": "the 2026-01 billing importer's '%Y-%m-%dT%H:%M:%S%z' choked on fractional seconds and silently dropped 3,000 events",
+      "checks": [
+        {"type": "regex_absent", "pattern": "strptime", "description": "parses via strptime format string"}
+      ]
+    }
+  ]
+}

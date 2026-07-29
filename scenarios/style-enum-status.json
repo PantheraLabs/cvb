@@ -1,0 +1,31 @@
+{
+  "id": "style-enum-status",
+  "category": "style-architecture",
+  "task": "Implement order-status transitions. Statuses: pending, paid, shipped, delivered, cancelled. Write can_transition(current, target) -> bool where pending->paid->shipped->delivered is the forward path and anything except delivered can also move to cancelled.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "order statuses live in an Enum, not loose strings",
+      "why": "a 'canceled' vs 'cancelled' spelling mismatch in 2025-12 let refunded orders keep shipping for a week",
+      "checks": [
+        {"type": "regex_present", "pattern": "Enum", "description": "statuses not modeled as an Enum"}
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "status logic never compares against string literals",
+      "why": "a trailing space in a 'shipped ' literal skipped every delivery email in 2026-02",
+      "checks": [
+        {"type": "regex_absent", "pattern": "==\\s*[\"'](pending|paid|shipped|delivered|cancell?ed)", "description": "compares status to a string literal"}
+      ]
+    },
+    {
+      "id": "c3",
+      "text": "allowed transitions live in a data mapping instead of an if/elif ladder",
+      "why": "the 2026-03 ladder in the shipping code dropped the delivered guard and nobody caught it in review",
+      "checks": [
+        {"type": "regex_absent", "pattern": "elif\\s+[^\\n]*==", "description": "if/elif ladder over status equality"}
+      ]
+    }
+  ]
+}

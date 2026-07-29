@@ -45,7 +45,6 @@ def test_bad_regex_flagged():
     assert any("regex" in p for p in validate_scenario(bad))
 
 
-@pytest.mark.xfail(strict=False, reason="scenario files land in Tasks 4-5")
 def test_all_committed_scenarios_valid_and_quota_met():
     scenarios = load_scenarios(Path(__file__).parent.parent / "scenarios")
     assert len(scenarios) >= 35

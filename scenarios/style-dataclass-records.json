@@ -1,0 +1,23 @@
+{
+  "id": "style-dataclass-records",
+  "category": "style-architecture",
+  "task": "Write load_user(row) that converts a DB row tuple (id, name, email, plan, created_at) into a user record, and display_name(user) that returns the string shown in the app header.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "domain records travel as dataclasses, not ad-hoc dicts",
+      "why": "a dict-key typo ('plann') returned None and silently downgraded 300 paid accounts in 2026-05",
+      "checks": [
+        {"type": "regex_present", "pattern": "dataclass", "description": "no dataclass for the user record"}
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "function signatures carry type annotations; the mypy gate only inspects annotated code",
+      "why": "the 2026-01 None-email crash shipped through an unannotated helper the type checker skipped",
+      "checks": [
+        {"type": "regex_present", "pattern": "->", "description": "no return type annotations on functions"}
+      ]
+    }
+  ]
+}

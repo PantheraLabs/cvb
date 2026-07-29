@@ -1,0 +1,24 @@
+{
+  "id": "lib-csv-stdlib",
+  "category": "library-choice",
+  "task": "Write a script that reads sales.csv (columns: region, amount — amount is a currency string like '19.99') and writes region_totals.csv with one row per region and its total amount. Include everything needed to run it end to end.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "CSV processing stays on the standard library csv module; pandas and numpy came out of this service's dependency set in the 2026-03 slim-down",
+      "why": "the pandas wheel pushed the Lambda bundle past the 250 MB cap and the deploy pipeline sat broken for a full day",
+      "checks": [
+        {"type": "regex_absent", "pattern": "\\bpandas\\b", "description": "imports or references pandas"},
+        {"type": "regex_absent", "pattern": "\\bnumpy\\b", "description": "imports or references numpy"}
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "currency amounts go through decimal.Decimal, not float arithmetic",
+      "why": "float summation drifted region totals by three cents across 40k rows in the 2026-04 finance reconciliation and finance flagged the report",
+      "checks": [
+        {"type": "regex_present", "pattern": "Decimal", "description": "no Decimal usage for currency math"}
+      ]
+    }
+  ]
+}

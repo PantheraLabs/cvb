@@ -1,0 +1,53 @@
+{
+  "id": "sec-session-no-pickle",
+  "category": "security",
+  "task": "Write Python helpers for a web app: restore_cart(cookie_value) that takes the base64 session blob from a cookie and reconstructs the user's cart (a list of item dicts), and pack_cart(cart) that produces the cookie value to send back.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "session blobs deserialize with a data-only format; pickle, dill and marshal never touch cookie bytes",
+      "why": "the 2025-12 pentest popped a reverse shell on staging via a forged pickle cookie: attacker-controlled bytes drove arbitrary object construction",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "\\b(pickle|dill|marshal)\\.loads?\\s*\\(",
+          "description": "deserializes cookie bytes with pickle/dill/marshal"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "carts round-trip through json.dumps and json.loads",
+      "why": "json keeps the blob inspectable in support tooling; the old binary format turned the 2026-01 cart-corruption triage into a two-day hex-dump session",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "json\\.loads",
+          "description": "cart not parsed with json.loads"
+        },
+        {
+          "type": "regex_present",
+          "pattern": "json\\.dumps",
+          "description": "cart not serialized with json.dumps"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "text": "each blob carries an HMAC-SHA256 tag, checked with a constant-time comparison before any parsing happens",
+      "why": "forged cookies sailed through in the 2025-12 pentest because nothing authenticated the blob; the timing-safe check closed the follow-up finding",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "\\bhmac\\b",
+          "description": "no HMAC verification of the blob"
+        },
+        {
+          "type": "regex_present",
+          "pattern": "compare_digest",
+          "description": "signature compared without a constant-time comparison"
+        }
+      ]
+    }
+  ]
+}

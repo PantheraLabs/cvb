@@ -1,0 +1,48 @@
+{
+  "id": "conc-cpu-process-pool",
+  "category": "concurrency",
+  "task": "Write compress_images(paths) that applies a CPU-heavy resize-and-reencode transform (Pillow) to thousands of image files in parallel and returns the output paths. Throughput is the whole point.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "CPU-bound fan-out runs on processes: ProcessPoolExecutor or multiprocessing",
+      "why": "the GIL capped the 2026-04 thread-based encoder at 1.1x speedup on a 16-core box; switching to a process pool hit 14x",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "(ProcessPoolExecutor|multiprocessing)",
+          "description": "no process-based parallelism"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "thread pools and raw threading.Thread stay out of the image pipeline",
+      "why": "same 2026-04 finding: threads serialized on the GIL and the nightly batch missed its window by five hours",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "ThreadPoolExecutor\\s*\\(",
+          "description": "uses a thread pool for CPU-bound work"
+        },
+        {
+          "type": "regex_absent",
+          "pattern": "threading\\.Thread\\s*\\(",
+          "description": "spawns raw threads for CPU-bound work"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "text": "pool spin-up sits under an if __name__ == '__main__' guard",
+      "why": "the spawn start method on the 2026-04 Windows build agent fork-bombed without the guard; the agent needed a hard reboot",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "__main__",
+          "description": "no __main__ guard around pool creation"
+        }
+      ]
+    }
+  ]
+}

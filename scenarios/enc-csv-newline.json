@@ -1,0 +1,23 @@
+{
+  "id": "enc-csv-newline",
+  "category": "encoding-io",
+  "task": "Write export_orders(orders: list[dict], path) that writes orders to a CSV file with a header row, and load_orders(path) that reads them back into a list of dicts.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "file handles passed to csv writers carry newline=''",
+      "why": "the 2026-02 finance export showed a blank line under every order in Excel on Windows — doubled row terminators from the default newline translation",
+      "checks": [
+        {"type": "regex_absent_unless", "pattern": "open\\([^)]*[\"']w[\"'][^)]*\\)", "unless": "newline", "description": "csv write handle opened without newline=''"}
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "text-mode opens name encoding='utf-8' explicitly",
+      "why": "the Windows build agent defaulted to cp1252 in 2026-01 and customer names came back as mojibake in the invoice run",
+      "checks": [
+        {"type": "regex_absent_unless", "pattern": "open\\([^)]*[\"'][wr][\"'][^)]*\\)", "unless": "encoding", "description": "text-mode open without explicit encoding"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "id": "async-no-blocking-sleep",
+  "category": "concurrency",
+  "task": "Write an async Python function poll_until_ready(check) that calls the async callable check() every 2 seconds until it returns True, giving up after 30 seconds.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "inside async functions, delays go through asyncio.sleep; blocking time.sleep froze the event loop in production",
+      "why": "a time.sleep call inside a coroutine stalled every request handler for 12 seconds during the May outage",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "time\\.sleep\\(",
+          "description": "calls blocking time.sleep in async code"
+        },
+        {
+          "type": "regex_present",
+          "pattern": "asyncio\\.sleep\\(",
+          "description": "does not use asyncio.sleep"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "polling loops track an explicit deadline (loop.time, time.monotonic, or asyncio.wait_for) instead of counting iterations",
+      "why": "an iteration-counting poller overshot its time budget when call latency spiked in May",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "monotonic\\(|loop\\.time\\(|wait_for\\(|deadline",
+          "description": "no deadline mechanism; likely counts iterations"
+        }
+      ]
+    }
+  ]
+}

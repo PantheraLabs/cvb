@@ -1,0 +1,33 @@
+{
+  "id": "lib-pinned-requirements",
+  "category": "library-choice",
+  "task": "Set up the dependencies for our image-resize microservice: write the requirements.txt (it uses fastapi, httpx, and pillow) and the Dockerfile RUN line that installs them.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "every dependency line carries an exact == pin",
+      "why": "an unpinned fastapi entry on 2026-06-14 pulled in a new pydantic major overnight and the deploy was down for four hours",
+      "checks": [
+        {"type": "regex_absent", "pattern": "(?i)(fastapi|httpx|pillow)\\s*>=", "description": "uses >= range instead of an exact pin"},
+        {"type": "regex_absent", "pattern": "(?im)^(fastapi|httpx|pillow)\\s*$", "description": "bare unpinned dependency line"},
+        {"type": "regex_present", "pattern": "==", "description": "no exact == pins anywhere"}
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "docker image installs run pip with --no-cache-dir",
+      "why": "cached wheels pushed the image past the registry's 2 GB cap in 2026-04 and blocked the release train",
+      "checks": [
+        {"type": "regex_present", "pattern": "--no-cache-dir", "description": "pip install without --no-cache-dir"}
+      ]
+    },
+    {
+      "id": "c3",
+      "text": "the Dockerfile installs from the pin file (pip install -r requirements.txt), never by re-listing package names inline",
+      "why": "inline names drifted from the pin file in 2025-12 and prod ran a different httpx than CI for two weeks",
+      "checks": [
+        {"type": "regex_present", "pattern": "-r\\s+\\S*requirements", "description": "Dockerfile does not install from requirements.txt"}
+      ]
+    }
+  ]
+}

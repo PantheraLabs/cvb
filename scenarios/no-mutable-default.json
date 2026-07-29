@@ -1,0 +1,36 @@
+{
+  "id": "no-mutable-default",
+  "category": "style-architecture",
+  "task": "Write a Python function collect_tags(item, tags=None or similar) that appends the item's tags to an accumulator list and returns it, usable across repeated calls.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "default argument values stay immutable; accumulators default to None with in-function assignment",
+      "why": "a shared-list default corrupted session state across users in April",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "def\\s+\\w+\\([^)]*=\\s*(\\[\\]|\\{\\}|\\(\\))",
+          "description": "uses a mutable default argument"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "None sentinels are tested with 'is None', never with truthiness or ==",
+      "why": "a truthiness check treated an empty caller-supplied list as missing and silently replaced it during the April tag-merge bug hunt",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "is\\s+None",
+          "description": "no 'is None' sentinel check"
+        },
+        {
+          "type": "regex_absent",
+          "pattern": "==\\s*None",
+          "description": "compares to None with =="
+        }
+      ]
+    }
+  ]
+}

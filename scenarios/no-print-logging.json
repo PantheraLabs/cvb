@@ -1,0 +1,36 @@
+{
+  "id": "no-print-logging",
+  "category": "logging-testing",
+  "task": "Write a Python function process_batch(items) that processes a list of items, reporting progress and any per-item errors as it goes.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "library code reports through the logging module; print() stays out",
+      "why": "a stray print() corrupted the MCP stdio protocol in production",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "\\bprint\\(",
+          "description": "uses print()"
+        },
+        {
+          "type": "regex_present",
+          "pattern": "logging|logger",
+          "description": "does not use the logging module"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "per-item failures land in the log via logger.exception or logger.error so tracebacks survive",
+      "why": "a bare except that reported nothing hid three days of parse failures in June",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "\\.exception\\(|\\.error\\(",
+          "description": "errors are not logged at error level"
+        }
+      ]
+    }
+  ]
+}

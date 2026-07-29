@@ -1,0 +1,36 @@
+{
+  "id": "no-orm-raw-sql",
+  "category": "library-choice",
+  "task": "Write a Python function get_user_by_email(email) that fetches a row from the users table of our database.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "database access goes through SQLAlchemy Core; raw sqlite3/psycopg2 connections stay out of application code",
+      "why": "the January connection-leak audit traced every leak to hand-managed raw driver connections",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "import\\s+sqlite3|from\\s+sqlite3|import\\s+psycopg2|from\\s+psycopg2",
+          "description": "imports a raw database driver"
+        },
+        {
+          "type": "regex_present",
+          "pattern": "sqlalchemy",
+          "description": "does not use SQLAlchemy"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "query values travel as bound parameters, never string-formatted into the SQL text",
+      "why": "a string-formatted WHERE clause opened an injection hole flagged in the spring pentest",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "f[\"'][^\\n]*SELECT|\\.format\\(\\s*email|[\"']\\s*\\+\\s*email|%\\s*email",
+          "description": "interpolates the email value into the SQL string"
+        }
+      ]
+    }
+  ]
+}

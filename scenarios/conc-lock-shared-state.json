@@ -1,0 +1,48 @@
+{
+  "id": "conc-lock-shared-state",
+  "category": "concurrency",
+  "task": "Write a crawl-stats module: run_crawl(urls) fans fetch work out on a ThreadPoolExecutor with about twenty workers; each worker calls record_hit(url, nbytes), which updates the module-level hits dict and total_bytes counter; report() returns the current numbers.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "hits and total_bytes only change inside a with-lock block on a shared threading.Lock",
+      "why": "lost increments under twenty threads made the 2026-03 crawl report 12 percent low; the unlocked += read-modify-write interleaved",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "Lock\\(",
+          "description": "no lock created for shared counters"
+        },
+        {
+          "type": "regex_present",
+          "pattern": "(?i)with\\s+[\\w.]*lock",
+          "description": "counter updates not wrapped in a with-lock block"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "the executor runs as a context manager (or gets an explicit shutdown) so every worker finishes before report() reads",
+      "why": "the 2025-10 job printed totals while eight workers were still writing; two consecutive report calls in the same log disagreed",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "(with\\s+[^\\n]*ThreadPoolExecutor|\\.shutdown\\()",
+          "description": "executor never joined (no with block, no shutdown)"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "text": "report() hands back copies of the counters, not the live dict",
+      "why": "iterating the live dict during the 2026-03 run raised RuntimeError: dictionary changed size during iteration inside the metrics exporter",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "return\\s+hits\\s*(,|$)",
+          "description": "returns the live hits dict"
+        }
+      ]
+    }
+  ]
+}

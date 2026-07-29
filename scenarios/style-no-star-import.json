@@ -1,0 +1,23 @@
+{
+  "id": "style-no-star-import",
+  "category": "style-architecture",
+  "task": "Build a small tkinter app: a temperature converter with an entry field, a Convert button, and a label showing the Fahrenheit result.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "imports stay namespaced (import tkinter as tk); wildcard imports went away after the dashboard incident",
+      "why": "a star import in the 2026-03 dashboard shadowed our own Label helper and the wrong widget shipped for a week",
+      "checks": [
+        {"type": "regex_absent", "pattern": "import\\s+\\*", "description": "wildcard import"}
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "widget state lives on a class or in closures; the global statement stays out of UI code",
+      "why": "two settings windows in 2026-04 shared one module-level global and overwrote each other's values",
+      "checks": [
+        {"type": "regex_absent", "pattern": "(?m)^\\s*global\\s+\\w", "description": "global statement for UI state"}
+      ]
+    }
+  ]
+}

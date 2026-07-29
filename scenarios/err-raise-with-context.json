@@ -1,0 +1,31 @@
+{
+  "id": "err-raise-with-context",
+  "category": "error-handling",
+  "task": "Write parse_amount(text) that converts user-entered money strings like '$1,234.56' or '1234' into integer cents. Bad input like 'abc' shows up a lot in this form field.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "unparseable input raises ValueError; sentinel returns like None or 0 stay out of the parser",
+      "why": "a zero-cents sentinel from the 2025-12 checkout parser charged eleven customers nothing and refunded three others their full cart total",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "return\\s+(None|0)\\s*$",
+          "description": "returns a None/0 sentinel for bad input"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "the ValueError chains to the original conversion failure via the from keyword, keeping the cause in the traceback",
+      "why": "the 2026-02 on-call spent an hour on a bare ValueError with no cause; a chained traceback would have named the malformed locale format immediately",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "raise[^\\n]*\\bfrom\\b",
+          "description": "raise without exception chaining (from)"
+        }
+      ]
+    }
+  ]
+}

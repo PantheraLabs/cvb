@@ -1,0 +1,24 @@
+{
+  "id": "log-lazy-formatting",
+  "category": "logging-testing",
+  "task": "Add logging to this order worker so each order can be traced through the pipeline:\n\n```python\ndef process(order):\n    validate(order)\n    charge(order)\n    ship(order)\n```",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "log calls use %-style lazy arguments, e.g. logger.info('charging %s', order_id), not f-strings",
+      "why": "eager f-string formatting serialized full cart objects on disabled debug lines and added 30 ms per order in the 2026-04 latency hunt",
+      "checks": [
+        {"type": "regex_absent", "pattern": "\\.(debug|info|warning|error|exception|critical)\\(\\s*f[\"']", "description": "f-string inside a log call"}
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "modules log through logging.getLogger(__name__), never via the root logging.* helpers",
+      "why": "a vendored library reconfigured the root logger in 2026-01 and worker logs vanished for two days",
+      "checks": [
+        {"type": "regex_present", "pattern": "getLogger", "description": "no module logger via getLogger"},
+        {"type": "regex_absent", "pattern": "(?m)^\\s*logging\\.(debug|info|warning|error|exception|critical)\\(", "description": "calls root logging helpers directly"}
+      ]
+    }
+  ]
+}

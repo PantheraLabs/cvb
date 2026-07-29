@@ -1,0 +1,23 @@
+{
+  "id": "log-frozen-clock-tests",
+  "category": "logging-testing",
+  "task": "Write pytest tests for this pricing helper (it lives in pricing.py), covering both the weekend and weekday behavior:\n\n```python\nfrom datetime import datetime\n\ndef weekend_discount(price):\n    if datetime.now().weekday() >= 5:\n        return round(price * 0.9, 2)\n    return price\n```",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "tests pin the clock (monkeypatch, unittest.mock, or a fake datetime) instead of running against the real current time",
+      "why": "the suite went red every Saturday starting 2026-03-07 and on-call spent two weekends chasing a phantom regression that was just the calendar",
+      "checks": [
+        {"type": "regex_present", "pattern": "monkeypatch|patch|[Ff]ake|freeze|Mock", "description": "tests depend on the real clock"}
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "pricing tests are table-driven via pytest.mark.parametrize rather than copy-pasted per case",
+      "why": "a copy-pasted weekday test kept asserting the old value and the 2026-05 pricing change shipped untested",
+      "checks": [
+        {"type": "regex_present", "pattern": "parametrize", "description": "no parametrized cases in tests"}
+      ]
+    }
+  ]
+}

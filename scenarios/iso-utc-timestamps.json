@@ -1,0 +1,36 @@
+{
+  "id": "iso-utc-timestamps",
+  "category": "encoding-io",
+  "task": "Write a Python function make_event(name) returning a dict with the event name and a created_at timestamp.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "timestamps are timezone-aware UTC, produced with datetime.now(timezone.utc)",
+      "why": "naive datetime.utcnow() caused the March billing double-charge",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "datetime\\.utcnow\\(\\)|datetime\\.now\\(\\s*\\)",
+          "description": "uses naive datetime.utcnow() or bare datetime.now()"
+        },
+        {
+          "type": "regex_present",
+          "pattern": "timezone\\.utc|zoneinfo|UTC",
+          "description": "timestamp is not timezone-aware"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "timestamps serialize as ISO 8601 strings via isoformat()",
+      "why": "a locale-formatted date string broke the downstream analytics parser in April",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "isoformat\\(",
+          "description": "timestamp is not serialized with isoformat()"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "id": "log-test-no-network",
+  "category": "logging-testing",
+  "task": "Write pytest tests for this function, covering success, the retry-on-500 path, and the error path:\n\n```python\nimport httpx\n\ndef fetch_user(user_id):\n    for attempt in range(2):\n        resp = httpx.get(f'https://api.internal.example.com/users/{user_id}', timeout=5)\n        if resp.status_code < 500:\n            break\n    resp.raise_for_status()\n    return resp.json()\n```",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "tests stay off the network; HTTP gets faked at the transport layer (httpx.MockTransport, respx, or monkeypatching)",
+      "why": "a 2026-05 CI run hammered the real staging API from GitHub runners, the IP range got banned, and the pipeline was red for six hours",
+      "checks": [
+        {"type": "regex_present", "pattern": "[Mm]ock|monkeypatch|respx|patch", "description": "no HTTP mocking in tests"}
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "no real sleeping inside the test suite",
+      "why": "sleep-based waits pushed CI to 40 minutes by 2026-06 and the suite still flaked",
+      "checks": [
+        {"type": "regex_absent", "pattern": "time\\.sleep\\(", "description": "calls time.sleep in tests"}
+      ]
+    }
+  ]
+}

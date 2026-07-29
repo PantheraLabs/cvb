@@ -1,0 +1,37 @@
+{
+  "id": "utf8-file-io",
+  "category": "encoding-io",
+  "task": "Write a Python function save_report(path, text) that writes the given text to the given path, and a load_report(path) that reads it back.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "all text file I/O passes encoding='utf-8' explicitly",
+      "why": "the Windows cp1252 default corrupted exported data files twice this year",
+      "checks": [
+        {
+          "type": "regex_absent_unless",
+          "pattern": "open\\([^)]*\\)",
+          "unless": "encoding=",
+          "description": "open() call without an explicit encoding"
+        },
+        {
+          "type": "regex_present",
+          "pattern": "utf-?8|utf_8",
+          "description": "utf-8 is never named as the encoding"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "decoding failures surface as exceptions; error-swallowing modes like errors='ignore' stay out of the codebase",
+      "why": "errors='ignore' silently dropped customer names with accents from the June export",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "errors\\s*=\\s*[\"'](ignore|replace)[\"']",
+          "description": "suppresses decode errors with errors='ignore' or 'replace'"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "id": "conc-async-no-blocking",
+  "category": "concurrency",
+  "task": "Write an async FastAPI handler get_dashboard() that pulls JSON from three internal service URLs, reads the local template file dashboard.html, and returns everything combined in one JSON response.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "blocking HTTP clients (requests, urllib) stay out of async handlers",
+      "why": "one requests.get inside a handler froze the whole event loop during the 2026-01 gateway brownout; every other request queued behind it",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "\\brequests\\.",
+          "description": "calls the blocking requests library"
+        },
+        {
+          "type": "regex_absent",
+          "pattern": "urllib\\.request",
+          "description": "calls blocking urllib.request"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "service calls go through httpx.AsyncClient with await",
+      "why": "standardizing on one async client after the 2026-01 freeze made loop-blocking imports greppable in CI",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "AsyncClient",
+          "description": "no httpx.AsyncClient for service calls"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "text": "file reads inside handlers hop off the loop via asyncio.to_thread or aiofiles",
+      "why": "a 40 ms template read off NFS stalled the loop under load in the 2025-11 spike, tripling p99 latency across the service",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "(to_thread|aiofiles|run_in_executor)",
+          "description": "template read blocks the event loop"
+        }
+      ]
+    }
+  ]
+}

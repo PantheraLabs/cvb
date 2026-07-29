@@ -1,0 +1,44 @@
+{
+  "id": "conc-gather-fanout",
+  "category": "concurrency",
+  "task": "Write async fetch_all(urls) with httpx that downloads about fifty JSON endpoints and returns their parsed bodies as a list. Wall-clock latency matters here.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "the fan-out runs concurrently via asyncio.gather or a TaskGroup, never one await per loop iteration",
+      "why": "the sequential-await version of the 2026-01 dashboard warmer took 90 seconds against a 5-second budget; gather brought it down to 2",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "(asyncio\\.gather|TaskGroup|as_completed|create_task)",
+          "description": "no concurrent fan-out (sequential awaits)"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "the shared AsyncClient is constructed with an explicit timeout",
+      "why": "one stuck endpoint with no timeout wedged the 2025-12 batch for 20 minutes; every coroutine sat behind the same dead socket",
+      "checks": [
+        {
+          "type": "regex_absent_unless",
+          "pattern": "AsyncClient\\([^)]*\\)",
+          "unless": "timeout",
+          "description": "AsyncClient constructed without a timeout"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "text": "one failing endpoint leaves the other results intact: return_exceptions=True or a per-task except",
+      "why": "a single 503 nuked all fifty results in the 2026-02 run because the naked gather re-raised and dropped everything already downloaded",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "(return_exceptions|except\\b)",
+          "description": "no isolation of per-endpoint failures"
+        }
+      ]
+    }
+  ]
+}

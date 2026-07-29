@@ -1,0 +1,36 @@
+{
+  "id": "no-requests-lib",
+  "category": "library-choice",
+  "task": "Write a Python function fetch_status(url) that GETs the URL and returns the JSON body, with a 5 second timeout.",
+  "constraints": [
+    {
+      "id": "c1",
+      "text": "HTTP client code uses httpx; the 'requests' library stays out of the codebase",
+      "why": "the team standardized on httpx for connection pooling and HTTP/2 after requests caused a socket-exhaustion incident in March",
+      "checks": [
+        {
+          "type": "regex_absent",
+          "pattern": "import\\s+requests|from\\s+requests",
+          "description": "imports the requests library"
+        },
+        {
+          "type": "regex_present",
+          "pattern": "httpx",
+          "description": "does not use httpx"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "text": "every outbound network call carries an explicit timeout",
+      "why": "a call with no timeout hung the deploy pipeline for 40 minutes during the March incident",
+      "checks": [
+        {
+          "type": "regex_present",
+          "pattern": "timeout",
+          "description": "no explicit timeout on the network call"
+        }
+      ]
+    }
+  ]
+}
