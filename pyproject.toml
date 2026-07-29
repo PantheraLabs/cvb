@@ -1,0 +1,20 @@
+[project]
+name = "cvb"
+version = "2.0.0"
+description = "Constraint-Violation Benchmark: do coding agents honor project constraints delivered as orders vs as memory?"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = ["httpx>=0.27"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["cvb"]
