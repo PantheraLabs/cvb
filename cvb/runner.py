@@ -33,9 +33,10 @@ PREFERRED_MODELS = [
 
 _MAX_ATTEMPTS = 8
 _MAX_BACKOFF = 60.0
-# Retry-After from a daily/TPM quota can legitimately be many minutes;
-# honor it up to this cap instead of the generic backoff cap.
-_MAX_RETRY_AFTER = 900.0
+# A Retry-After above this is a quota window (daily/TPM), not a transient
+# burst limit. Sleeping it out serializes the whole matrix behind one model;
+# fail fast instead so run_matrix defers the model and the other models run.
+_QUOTA_WALL_RETRY_AFTER = 120.0
 
 
 def call_model(
@@ -76,13 +77,17 @@ def call_model(
                     request=response.request,
                     response=response,
                 )
+                if retry_after is not None and retry_after > _QUOTA_WALL_RETRY_AFTER:
+                    # Quota window, not a burst limit: retrying is pointless
+                    # for minutes/hours. Surface immediately for deferral.
+                    raise last_error
             else:
                 response.raise_for_status()
                 return response.json()["choices"][0]["message"]["content"]
         if attempt < _MAX_ATTEMPTS - 1:
             delay = min(backoff_base * 2 ** attempt, _MAX_BACKOFF)
             if retry_after is not None:
-                delay = min(max(retry_after, delay), _MAX_RETRY_AFTER)
+                delay = max(retry_after, delay)
             time.sleep(delay)
     assert last_error is not None
     raise last_error
