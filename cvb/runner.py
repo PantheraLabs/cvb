@@ -26,12 +26,13 @@ DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
 PREFERRED_MODELS = [
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
-    "deepseek-r1-distill-llama-70b",
-    "qwen-2.5-72b-instruct",
-    "gemma2-9b-it",
+    "openai/gpt-oss-120b",
+    "qwen/qwen3.6-27b",
+    "openai/gpt-oss-20b",
 ]
 
-_MAX_ATTEMPTS = 3
+_MAX_ATTEMPTS = 8
+_MAX_BACKOFF = 60.0
 
 
 def call_model(
@@ -42,9 +43,10 @@ def call_model(
     prompt: str,
     backoff_base: float = 1.0,
 ) -> str:
-    """POST a single chat completion. Retries up to 3 attempts on 429, 5xx,
-    or httpx timeout, sleeping backoff_base * 2**attempt between attempts.
-    Raises after the final failure."""
+    """POST a single chat completion. Retries up to _MAX_ATTEMPTS on 429, 5xx,
+    or httpx timeout. Sleep between attempts honors the server's Retry-After
+    header when present (free-tier rate limits send it), otherwise exponential
+    backoff capped at _MAX_BACKOFF. Raises after the final failure."""
     url = f"{base_url}/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}"}
     payload = {
@@ -55,12 +57,17 @@ def call_model(
     }
     last_error: Exception | None = None
     for attempt in range(_MAX_ATTEMPTS):
+        retry_after = None
         try:
             response = client.post(url, headers=headers, json=payload)
         except httpx.TimeoutException as exc:
             last_error = exc
         else:
             if response.status_code == 429 or response.status_code >= 500:
+                try:
+                    retry_after = float(response.headers.get("retry-after", ""))
+                except ValueError:
+                    retry_after = None
                 last_error = httpx.HTTPStatusError(
                     f"retryable status {response.status_code}",
                     request=response.request,
@@ -70,7 +77,10 @@ def call_model(
                 response.raise_for_status()
                 return response.json()["choices"][0]["message"]["content"]
         if attempt < _MAX_ATTEMPTS - 1:
-            time.sleep(backoff_base * 2 ** attempt)
+            delay = min(backoff_base * 2 ** attempt, _MAX_BACKOFF)
+            if retry_after is not None:
+                delay = min(max(retry_after, delay), _MAX_BACKOFF)
+            time.sleep(delay)
     assert last_error is not None
     raise last_error
 
@@ -99,15 +109,35 @@ def run_matrix(
     client: httpx.Client,
     base_url: str,
     api_key: str,
+    existing_records: list[dict] | None = None,
+    checkpoint_path: str | Path | None = None,
+    sleep_between: float = 0.0,
 ) -> dict:
-    """Run every model x scenario x arm x run cell and score each reply."""
-    records: list[dict] = []
+    """Run every model x scenario x arm x run cell and score each reply.
+
+    Cells already present in existing_records (keyed by model/scenario/arm/run)
+    are skipped, which makes crashed runs resumable. When checkpoint_path is
+    set, the full result JSON is rewritten after every scenario x arm block so
+    a crash never loses more than one block."""
+    records: list[dict] = list(existing_records or [])
+    done = {(r["model"], r["scenario_id"], r["arm"], r["run"]) for r in records}
+    result = {
+        "prompt_version": PROMPT_VERSION,
+        "base_url": base_url,
+        "runs_per_arm": runs,
+        "records": records,
+    }
     for model in models:
         for scenario in scenarios:
             for arm in ARMS:
                 prompt = build_prompt(arm, scenario)
+                fresh = 0
                 for run in range(runs):
+                    if (model, scenario["id"], arm, run) in done:
+                        continue
                     reply = call_model(client, base_url, api_key, model, prompt)
+                    if sleep_between > 0:
+                        time.sleep(sleep_between)
                     code = extract_code(reply)
                     constraint_results = [
                         evaluate_constraint(c, code) for c in scenario["constraints"]
@@ -123,13 +153,19 @@ def run_matrix(
                     if any(c["violated"] for c in constraint_results):
                         record["raw_sample"] = reply
                     records.append(record)
-                print(f"[{model}] {scenario['id']} arm={arm} {runs}/{runs}")
-    return {
-        "prompt_version": PROMPT_VERSION,
-        "base_url": base_url,
-        "runs_per_arm": runs,
-        "records": records,
-    }
+                    fresh += 1
+                if fresh and checkpoint_path is not None:
+                    _write_json(checkpoint_path, result)
+                if fresh:
+                    print(f"[{model}] {scenario['id']} arm={arm} {runs}/{runs}", flush=True)
+    return result
+
+
+def _write_json(path: str | Path, payload: dict) -> None:
+    out_path = Path(path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2)
 
 
 def _load_scenarios_lenient(dir_path: str) -> list[dict]:
@@ -160,6 +196,17 @@ def main(argv: list[str] | None = None) -> int:
         "--dry-run",
         action="store_true",
         help="list scenario ids + resolved models without calling the API",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="skip cells already present in the --json file",
+    )
+    parser.add_argument(
+        "--sleep",
+        type=float,
+        default=0.0,
+        help="seconds to sleep between calls (free-tier rate-limit politeness)",
     )
     args = parser.parse_args(argv)
 
@@ -203,6 +250,12 @@ def main(argv: list[str] | None = None) -> int:
         print("ERROR: --json output path is required for a live run")
         return 2
 
+    existing_records: list[dict] = []
+    if args.resume and Path(args.json_path).is_file():
+        with open(args.json_path, encoding="utf-8") as fh:
+            existing_records = json.load(fh).get("records", [])
+        print(f"resuming: {len(existing_records)} records already present")
+
     with httpx.Client(timeout=60.0) as client:
         if requested is not None:
             models = requested
@@ -212,14 +265,16 @@ def main(argv: list[str] | None = None) -> int:
             print("ERROR: no preferred models available at the endpoint")
             return 2
         print(f"running {len(models)} models x {len(scenarios)} scenarios x "
-              f"{len(ARMS)} arms x {args.runs} runs")
-        result = run_matrix(models, scenarios, args.runs, client, args.base_url, api_key)
+              f"{len(ARMS)} arms x {args.runs} runs", flush=True)
+        result = run_matrix(
+            models, scenarios, args.runs, client, args.base_url, api_key,
+            existing_records=existing_records,
+            checkpoint_path=args.json_path,
+            sleep_between=args.sleep,
+        )
 
-    out_path = Path(args.json_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as fh:
-        json.dump(result, fh, indent=2)
-    print(f"wrote {len(result['records'])} records -> {out_path}")
+    _write_json(args.json_path, result)
+    print(f"wrote {len(result['records'])} records -> {args.json_path}")
     return 0
 
 
