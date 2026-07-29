@@ -33,6 +33,9 @@ PREFERRED_MODELS = [
 
 _MAX_ATTEMPTS = 8
 _MAX_BACKOFF = 60.0
+# Retry-After from a daily/TPM quota can legitimately be many minutes;
+# honor it up to this cap instead of the generic backoff cap.
+_MAX_RETRY_AFTER = 900.0
 
 
 def call_model(
@@ -79,7 +82,7 @@ def call_model(
         if attempt < _MAX_ATTEMPTS - 1:
             delay = min(backoff_base * 2 ** attempt, _MAX_BACKOFF)
             if retry_after is not None:
-                delay = min(max(retry_after, delay), _MAX_BACKOFF)
+                delay = min(max(retry_after, delay), _MAX_RETRY_AFTER)
             time.sleep(delay)
     assert last_error is not None
     raise last_error
@@ -127,37 +130,49 @@ def run_matrix(
         "runs_per_arm": runs,
         "records": records,
     }
+    deferred: list[str] = []
     for model in models:
-        for scenario in scenarios:
-            for arm in ARMS:
-                prompt = build_prompt(arm, scenario)
-                fresh = 0
-                for run in range(runs):
-                    if (model, scenario["id"], arm, run) in done:
-                        continue
-                    reply = call_model(client, base_url, api_key, model, prompt)
-                    if sleep_between > 0:
-                        time.sleep(sleep_between)
-                    code = extract_code(reply)
-                    constraint_results = [
-                        evaluate_constraint(c, code) for c in scenario["constraints"]
-                    ]
-                    record = {
-                        "model": model,
-                        "scenario_id": scenario["id"],
-                        "category": scenario["category"],
-                        "arm": arm,
-                        "run": run,
-                        "constraints": constraint_results,
-                    }
-                    if any(c["violated"] for c in constraint_results):
-                        record["raw_sample"] = reply
-                    records.append(record)
-                    fresh += 1
-                if fresh and checkpoint_path is not None:
-                    _write_json(checkpoint_path, result)
-                if fresh:
-                    print(f"[{model}] {scenario['id']} arm={arm} {runs}/{runs}", flush=True)
+        try:
+            for scenario in scenarios:
+                for arm in ARMS:
+                    prompt = build_prompt(arm, scenario)
+                    fresh = 0
+                    for run in range(runs):
+                        if (model, scenario["id"], arm, run) in done:
+                            continue
+                        reply = call_model(client, base_url, api_key, model, prompt)
+                        if sleep_between > 0:
+                            time.sleep(sleep_between)
+                        code = extract_code(reply)
+                        constraint_results = [
+                            evaluate_constraint(c, code) for c in scenario["constraints"]
+                        ]
+                        record = {
+                            "model": model,
+                            "scenario_id": scenario["id"],
+                            "category": scenario["category"],
+                            "arm": arm,
+                            "run": run,
+                            "constraints": constraint_results,
+                        }
+                        if any(c["violated"] for c in constraint_results):
+                            record["raw_sample"] = reply
+                        records.append(record)
+                        fresh += 1
+                    if fresh and checkpoint_path is not None:
+                        _write_json(checkpoint_path, result)
+                    if fresh:
+                        print(f"[{model}] {scenario['id']} arm={arm} {runs}/{runs}", flush=True)
+        except (httpx.HTTPStatusError, httpx.TimeoutException) as exc:
+            # Retry exhaustion on this model (quota window). Checkpoint what we
+            # have and move on to the next model; a later --resume pass fills
+            # the gap instead of the whole matrix dying.
+            if checkpoint_path is not None:
+                _write_json(checkpoint_path, result)
+            deferred.append(model)
+            print(f"[{model}] DEFERRED after retry exhaustion: {exc}", flush=True)
+    if deferred:
+        result["deferred_models"] = deferred
     return result
 
 
@@ -275,6 +290,11 @@ def main(argv: list[str] | None = None) -> int:
 
     _write_json(args.json_path, result)
     print(f"wrote {len(result['records'])} records -> {args.json_path}")
+    if result.get("deferred_models"):
+        print("INCOMPLETE: deferred models: "
+              + ", ".join(result["deferred_models"])
+              + " (rerun with --resume to fill gaps)")
+        return 3
     return 0
 
 
