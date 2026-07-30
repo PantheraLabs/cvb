@@ -64,7 +64,9 @@ def call_model(
         retry_after = None
         try:
             response = client.post(url, headers=headers, json=payload)
-        except httpx.TimeoutException as exc:
+        except httpx.TransportError as exc:
+            # Timeouts, DNS failures, dropped connections — all transient
+            # network faults worth the same backoff-and-retry treatment.
             last_error = exc
         else:
             if response.status_code == 429 or response.status_code >= 500:
@@ -168,7 +170,7 @@ def run_matrix(
                         _write_json(checkpoint_path, result)
                     if fresh:
                         print(f"[{model}] {scenario['id']} arm={arm} {runs}/{runs}", flush=True)
-        except (httpx.HTTPStatusError, httpx.TimeoutException) as exc:
+        except httpx.HTTPError as exc:
             # Retry exhaustion on this model (quota window). Checkpoint what we
             # have and move on to the next model; a later --resume pass fills
             # the gap instead of the whole matrix dying.
