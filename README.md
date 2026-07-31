@@ -57,15 +57,42 @@ python -m cvb.report results/out.json --markdown results/out.md
 ```
 
 Default models are probed from the live Groq catalog (first three available
-of: `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`,
-`deepseek-r1-distill-llama-70b`, `qwen-2.5-72b-instruct`, `gemma2-9b-it`).
+of: `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `openai/gpt-oss-120b`,
+`qwen/qwen3.6-27b`, `openai/gpt-oss-20b`).
 Override with `--models`, point anywhere OpenAI-compatible with
 `--base-url` / `--api-key-env`.
 
 ## Results
 
-_First full 3-model run pending — tables will land here with exact model
-IDs, date, and committed raw JSON under `results/`._
+**Run of 2026-07-30** — Groq API, temperature 0, 3 runs per arm,
+35 scenarios, prompt version 2.0. Raw JSON in
+[`results/2026-07-29-groq/`](results/2026-07-29-groq/). Strict accuracy =
+share of runs with **every** constraint honored.
+
+| model | cold | mandated | incentivized | gap (mandated − incentivized) |
+| --- | --- | --- | --- | --- |
+| `llama-3.1-8b-instant` | 0.229 | 0.914 | 0.857 | **+0.057** |
+| `llama-3.3-70b-versatile` | 0.229 | 0.952 | 0.981 | **−0.029** |
+| `openai/gpt-oss-120b` | 0.638 | 0.962 | 0.952 | **+0.010** |
+
+What the numbers say:
+
+1. **The scenarios genuinely tempt violations.** Cold accuracy is 0.23 for
+   both Llamas — without context, models default to the violating pattern
+   (naive `datetime.now()`, `shell=True`, no locks, `print` logging).
+2. **Context injection is worth +60–75 points.** Every arm that carries the
+   constraints — as orders or as memory — massively beats cold. The main
+   battle is getting constraints into context at all.
+3. **The mandated-vs-incentivized gap is small and model-dependent.** The
+   weakest model (8B) loses 5.7 points when constraints arrive as ambient
+   memory instead of orders. The 70B model actually adheres *better* to
+   memory framing (−2.9). For current mid-size models, non-directive memory
+   context is roughly as effective as explicit instructions in single-turn
+   generation.
+
+Per-category tables: [`results/2026-07-29-groq/report.md`](results/2026-07-29-groq/report.md).
+A fourth model (`qwen/qwen3.6-27b`) is mid-run behind free-tier quota
+windows; its row lands when its matrix completes.
 
 ## Honest limitations
 
