@@ -7,6 +7,7 @@
 | llama-3.1-8b-instant | 0.229 | 0.914 | 0.857 | 0.057 |
 | llama-3.3-70b-versatile | 0.229 | 0.952 | 0.981 | -0.029 |
 | openai/gpt-oss-120b | 0.638 | 0.962 | 0.952 | 0.010 |
+| qwen/qwen3.6-27b | 0.476 | 1.000 | 1.000 | 0.000 |
 
 ## llama-3.1-8b-instant by category (strict accuracy)
 
@@ -43,3 +44,15 @@
 | logging-testing | 0.933 | 1.000 | 0.800 |
 | security | 0.600 | 1.000 | 1.000 |
 | style-architecture | 0.600 | 1.000 | 1.000 |
+
+## qwen/qwen3.6-27b by category (strict accuracy)
+
+| category | cold | mandated | incentivized |
+| --- | --- | --- | --- |
+| concurrency | 0.600 | 1.000 | 1.000 |
+| encoding-io | 0.400 | 1.000 | 1.000 |
+| error-handling | 0.000 | 1.000 | 1.000 |
+| library-choice | 0.200 | 1.000 | 1.000 |
+| logging-testing | 0.800 | 1.000 | 1.000 |
+| security | 0.800 | 1.000 | 1.000 |
+| style-architecture | 0.533 | 1.000 | 1.000 |

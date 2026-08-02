@@ -64,8 +64,8 @@ Override with `--models`, point anywhere OpenAI-compatible with
 
 ## Results
 
-**Run of 2026-07-30** — Groq API, temperature 0, 3 runs per arm,
-35 scenarios, prompt version 2.0. Raw JSON in
+**Run of 2026-07-30 – 2026-08-02** — Groq API, temperature 0, 3 runs per
+arm, 35 scenarios, prompt version 2.0, 1260 records total. Raw JSON in
 [`results/2026-07-29-groq/`](results/2026-07-29-groq/). Strict accuracy =
 share of runs with **every** constraint honored.
 
@@ -74,6 +74,7 @@ share of runs with **every** constraint honored.
 | `llama-3.1-8b-instant` | 0.229 | 0.914 | 0.857 | **+0.057** |
 | `llama-3.3-70b-versatile` | 0.229 | 0.952 | 0.981 | **−0.029** |
 | `openai/gpt-oss-120b` | 0.638 | 0.962 | 0.952 | **+0.010** |
+| `qwen/qwen3.6-27b` | 0.476 | 1.000 | 1.000 | **0.000** |
 
 What the numbers say:
 
@@ -86,13 +87,11 @@ What the numbers say:
 3. **The mandated-vs-incentivized gap is small and model-dependent.** The
    weakest model (8B) loses 5.7 points when constraints arrive as ambient
    memory instead of orders. The 70B model actually adheres *better* to
-   memory framing (−2.9). For current mid-size models, non-directive memory
-   context is roughly as effective as explicit instructions in single-turn
-   generation.
+   memory framing (−2.9), and qwen3.6-27b is perfect under both framings
+   (gap 0.0). For current mid-size models, non-directive memory context is
+   roughly as effective as explicit instructions in single-turn generation.
 
 Per-category tables: [`results/2026-07-29-groq/report.md`](results/2026-07-29-groq/report.md).
-A fourth model (`qwen/qwen3.6-27b`) is mid-run behind free-tier quota
-windows; its row lands when its matrix completes.
 
 ## Honest limitations
 
