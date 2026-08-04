@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CVB — Constraint-Violation Benchmark</title>
+<meta name="description" content="CVB measures whether coding LLMs honor project constraints delivered as orders vs. ambient memory. Deterministic regex scoring, no LLM judge.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  /* ============ design tokens ============ */
+  :root {
+    /* warm dark — ink & amber family, H:60–80 throughout */
+    --bg:        oklch(0.13 0.012 65);
+    --surface:   oklch(0.165 0.012 65);
+    --surface-2: oklch(0.20 0.014 65);
+    --border:    oklch(0.28 0.015 62);
+    --hairline:  oklch(0.23 0.013 62);
+    --text:      oklch(0.91 0.02 78);
+    --text-dim:  oklch(0.66 0.03 62);
+    --text-faint:oklch(0.50 0.025 62);
+
+    /* arm colors */
+    --cold:      oklch(0.58 0.015 65);   /* warm gray — no context */
+    --mandated:  oklch(0.78 0.15 75);    /* amber — orders */
+    --incent:    oklch(0.74 0.11 160);   /* green — memory */
+    --violation: oklch(0.63 0.19 30);    /* vermillion — negative/violations */
+
+    --mono: 'Space Mono', 'Consolas', monospace;
+    --sans: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+
+    --measure: 68ch;
+    --pad-section: clamp(3.5rem, 9vw, 7.5rem);
+    --pad-x: clamp(1.25rem, 4vw, 3rem);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: clamp(1rem, 0.95rem + 0.25vw, 1.0625rem);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: var(--mandated); color: var(--bg); }
+
+  a { color: var(--mandated); text-decoration: none; border-bottom: 1px solid oklch(0.78 0.15 75 / 0.35); }
+  a:hover { border-bottom-color: var(--mandated); }
+
+  code, .mono { font-family: var(--mono); }
+
+  .wrap { max-width: 72rem; margin-inline: auto; padding-inline: var(--pad-x); }
+
+  section { padding-block: var(--pad-section); border-top: 1px solid var(--hairline); }
+
+  .kicker {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--mandated);
+    margin-bottom: 1rem;
+  }
+  .kicker::before { content: "// "; color: var(--text-faint); }
+
+  h2 {
+    font-size: clamp(1.6rem, 1.2rem + 1.8vw, 2.4rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    margin-bottom: 1.25rem;
+  }
+  h3 { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.01em; }
+
+  p { max-width: var(--measure); }
+  p + p { margin-top: 1em; }
+
+  /* ============ top nav ============ */
+  nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-block: 1.1rem;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .nav-brand { font-family: var(--mono); font-weight: 700; font-size: 1rem; color: var(--text); border: none; }
+  .nav-brand .tick { color: var(--mandated); }
+  .nav-links { display: flex; gap: 1.75rem; }
+  .nav-links a {
+    font-family: var(--mono); font-size: 0.8rem; letter-spacing: 0.05em;
+    color: var(--text-dim); border: none;
+  }
+  .nav-links a:hover { color: var(--text); }
+  @media (max-width: 640px) { .nav-links a:nth-child(-n+2) { display: none; } }
+
+  /* ============ hero ============ */
+  header.hero { padding-block: clamp(4rem, 11vw, 8.5rem) var(--pad-section); }
+
+  .hero-claim {
+    font-size: clamp(1.9rem, 1.2rem + 3.4vw, 3.6rem);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.08;
+    max-width: 24ch;
+  }
+  .hero-claim em { font-style: normal; color: var(--mandated); }
+
+  .hero-sub {
+    margin-top: 1.5rem;
+    color: var(--text-dim);
+    max-width: 58ch;
+    font-size: clamp(1rem, 0.95rem + 0.3vw, 1.15rem);
+  }
+
+  /* oversized stat — the one aesthetic risk: number as layout */
+  .hero-stat {
+    margin-top: clamp(2.5rem, 6vw, 4.5rem);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding-block: clamp(1.5rem, 4vw, 2.75rem);
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: clamp(1rem, 4vw, 3.5rem);
+    align-items: center;
+  }
+  .hero-stat .big {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: clamp(3.2rem, 2rem + 9vw, 8.5rem);
+    line-height: 0.9;
+    letter-spacing: -0.05em;
+    color: var(--mandated);
+    white-space: nowrap;
+  }
+  .hero-stat .big sub { font-size: 0.28em; font-weight: 400; color: var(--text-dim); vertical-align: baseline; letter-spacing: 0; }
+  .hero-stat .caption { color: var(--text-dim); font-size: 0.95rem; max-width: 34ch; }
+  .hero-stat .caption strong { color: var(--text); }
+  @media (max-width: 720px) {
+    .hero-stat { grid-template-columns: 1fr; gap: 1rem; }
+  }
+
+  .hero-links { margin-top: 2rem; display: flex; flex-wrap: wrap; gap: 0.75rem; }
+  .btn {
+    font-family: var(--mono); font-size: 0.85rem;
+    padding: 0.65rem 1.15rem;
+    border: 1px solid var(--border);
+    color: var(--text);
+    background: var(--surface);
+    transition: border-color 120ms ease-out, background 120ms ease-out;
+  }
+  .btn:hover { border-color: var(--mandated); background: var(--surface-2); }
+  .btn.primary { background: var(--mandated); color: var(--bg); border-color: var(--mandated); font-weight: 700; }
+  .btn.primary:hover { background: oklch(0.83 0.14 78); }
+
+  /* ============ leaderboard ============ */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; }
+  thead th {
+    font-family: var(--mono); font-size: 0.72rem; font-weight: 400;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-dim);
+    text-align: right;
+    padding: 0.9rem 1.1rem;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer; user-select: none;
+    white-space: nowrap;
+  }
+  thead th:first-child { text-align: left; }
+  thead th:hover { color: var(--text); }
+  thead th .dir { color: var(--mandated); }
+  tbody td {
+    font-family: var(--mono); font-size: 0.95rem;
+    text-align: right;
+    padding: 0.85rem 1.1rem;
+    border-bottom: 1px solid var(--hairline);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody td:first-child { text-align: left; color: var(--text); }
+  tbody tr:hover { background: var(--surface-2); }
+  td.gap { font-weight: 700; background: oklch(0.78 0.15 75 / 0.07); border-left: 1px solid var(--border); }
+  td .pos { color: var(--violation); }
+  td .neg { color: var(--incent); }
+  td .zero { color: var(--text-dim); }
+  .tbl-note { margin-top: 0.85rem; color: var(--text-faint); font-size: 0.8rem; font-family: var(--mono); }
+
+  /* ============ chart ============ */
+  .chart-legend { display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 1.5rem 0 1rem; font-family: var(--mono); font-size: 0.78rem; color: var(--text-dim); }
+  .chart-legend span { display: inline-flex; align-items: center; gap: 0.5rem; }
+  .swatch { width: 0.85rem; height: 0.85rem; display: inline-block; }
+  .chart-box { border: 1px solid var(--border); background: var(--surface); padding: clamp(1rem, 3vw, 2rem); overflow-x: auto; }
+  .chart-box svg { display: block; width: 100%; min-width: 560px; height: auto; }
+
+  /* ============ arms cards ============ */
+  .arms { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); margin-top: 2rem; }
+  .arm { background: var(--surface); padding: 1.75rem 1.5rem; border-top: 3px solid var(--arm-c); }
+  .arm .tag { font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--arm-c); }
+  .arm h3 { margin: 0.5rem 0 0.75rem; }
+  .arm p { font-size: 0.92rem; color: var(--text-dim); }
+  .arm .snippet {
+    margin-top: 1.1rem; padding: 0.8rem 0.9rem;
+    font-family: var(--mono); font-size: 0.78rem; line-height: 1.55;
+    background: var(--bg); border: 1px solid var(--hairline);
+    color: var(--text-dim);
+    white-space: pre-wrap;
+  }
+  .arm .snippet b { color: var(--text); font-weight: 400; }
+  .arm-cold  { --arm-c: var(--cold); }
+  .arm-mand  { --arm-c: var(--mandated); }
+  .arm-incent{ --arm-c: var(--incent); }
+  .gap-formula {
+    margin-top: 2rem; padding: 1.25rem 1.5rem;
+    border: 1px dashed var(--border);
+    font-family: var(--mono); font-size: 0.9rem; color: var(--text-dim);
+  }
+  .gap-formula b { color: var(--mandated); font-weight: 700; }
+
+  /* ============ method ============ */
+  .method-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: clamp(2rem, 6vw, 5rem); align-items: start; }
+  @media (max-width: 860px) { .method-grid { grid-template-columns: 1fr; } }
+  .method-facts { list-style: none; }
+  .method-facts li {
+    display: grid; grid-template-columns: auto 1fr; gap: 1rem;
+    padding-block: 0.8rem; border-bottom: 1px solid var(--hairline);
+    font-size: 0.95rem;
+  }
+  .method-facts .k { font-family: var(--mono); color: var(--mandated); font-size: 0.85rem; white-space: nowrap; }
+  .limits { margin-top: 0; }
+  .limits li { margin-bottom: 0.9rem; color: var(--text-dim); font-size: 0.95rem; max-width: 52ch; }
+  .limits li::marker { color: var(--violation); }
+  .limits b { color: var(--text); font-weight: 500; }
+
+  /* ============ run it ============ */
+  .code-block {
+    position: relative;
+    background: oklch(0.10 0.01 65);
+    border: 1px solid var(--border);
+    padding: 1.25rem 1.4rem;
+    overflow-x: auto;
+    margin-top: 1.5rem;
+  }
+  .code-block pre { font-family: var(--mono); font-size: 0.85rem; line-height: 1.7; color: var(--text); }
+  .code-block .c { color: var(--text-faint); }
+  .code-block .copy {
+    position: absolute; top: 0.6rem; right: 0.6rem;
+    font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.08em;
+    background: var(--surface-2); color: var(--text-dim);
+    border: 1px solid var(--border); padding: 0.3rem 0.65rem; cursor: pointer;
+  }
+  .code-block .copy:hover { color: var(--text); border-color: var(--mandated); }
+  .submit-note { margin-top: 1.5rem; color: var(--text-dim); font-size: 0.95rem; max-width: var(--measure); }
+
+  /* ============ footer ============ */
+  footer { border-top: 1px solid var(--hairline); padding-block: 2.5rem; }
+  .foot { display: flex; flex-wrap: wrap; gap: 1rem 2.5rem; font-family: var(--mono); font-size: 0.78rem; color: var(--text-faint); }
+  .foot a { color: var(--text-dim); border-bottom-color: transparent; }
+  .foot a:hover { color: var(--mandated); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav>
+    <a class="nav-brand" href="#"><span class="tick">$</span> cvb</a>
+    <div class="nav-links">
+      <a href="#leaderboard">leaderboard</a>
+      <a href="#how">how&nbsp;it&nbsp;works</a>
+      <a href="#run">run&nbsp;it</a>
+      <a href="https://github.com/PantheraLabs/CVB">github&nbsp;&nearr;</a>
+    </div>
+  </nav>
+
+  <!-- ============ 1 · hero ============ -->
+  <header class="hero">
+    <p class="kicker">Constraint-Violation Benchmark</p>
+    <h1 class="hero-claim">Do coding agents honor constraints that arrive as <em>memory</em> instead of orders?</h1>
+    <p class="hero-sub">CVB runs the same 35 coding tasks three ways — no constraints, constraints as explicit orders, constraints buried in ambient project memory — and measures what dies in translation. Deterministic regex scoring. No LLM judge. Temperature&nbsp;0.</p>
+
+    <div class="hero-stat">
+      <div class="big">+60&ndash;75<sub>&nbsp;pts</sub></div>
+      <p class="caption"><strong>Getting constraints into context at all is the whole battle.</strong> Framing them as orders vs. ambient memory moves strict accuracy by at most 5.7 points — and can even help.</p>
+    </div>
+
+    <div class="hero-links">
+      <a class="btn primary" href="https://github.com/PantheraLabs/CVB">GitHub repo &nearr;</a>
+      <a class="btn" href="https://github.com/PantheraLabs/CVB/blob/main/results/2026-07-29-groq/out.json">raw results JSON</a>
+      <a class="btn" href="https://github.com/PantheraLabs/CVB/blob/main/results/2026-07-29-groq/report.md">per-category report</a>
+    </div>
+  </header>
+
+  <!-- ============ 2 · leaderboard ============ -->
+  <section id="leaderboard">
+    <p class="kicker">Leaderboard</p>
+    <h2>Strict accuracy by arm</h2>
+    <p style="color:var(--text-dim); margin-bottom:1.75rem;">Share of runs with <b>every</b> constraint honored. Run of 2026-07-30 → 08-02 · Groq API · 3 runs per arm · 35 scenarios · prompt v2.0.</p>
+
+    <div class="table-scroll">
+      <table id="lb">
+        <thead>
+          <tr>
+            <th data-k="model">model <span class="dir"></span></th>
+            <th data-k="cold">cold <span class="dir"></span></th>
+            <th data-k="mandated">mandated <span class="dir"></span></th>
+            <th data-k="incentivized">incentivized <span class="dir"></span></th>
+            <th data-k="gap" class="gap-h">gap (mand − incent) <span class="dir"></span></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="tbl-note">click a column header to sort · gap &gt; 0 means adherence dies when rules live in memory</p>
+  </section>
+
+  <!-- ============ 3 · chart ============ -->
+  <section id="chart">
+    <p class="kicker">Cold vs. context</p>
+    <h2>One chart, whole story</h2>
+    <p style="color:var(--text-dim);">Every arm that carries the constraints — as orders <i>or</i> as memory — crushes the cold baseline. The two context arms are nearly indistinguishable.</p>
+    <div class="chart-legend">
+      <span><i class="swatch" style="background:var(--cold)"></i> cold (no constraints)</span>
+      <span><i class="swatch" style="background:var(--mandated)"></i> mandated (orders)</span>
+      <span><i class="swatch" style="background:var(--incent)"></i> incentivized (memory)</span>
+    </div>
+    <div class="chart-box"><svg id="barchart" role="img" aria-label="Horizontal bar chart of strict accuracy per model across cold, mandated and incentivized arms"></svg></div>
+  </section>
+
+  <!-- ============ 4 · how it works ============ -->
+  <section id="how">
+    <p class="kicker">How it works</p>
+    <h2>Same task. Three deliveries.</h2>
+    <p style="color:var(--text-dim);">Each of the 35 scenarios is a natural coding task that tempts the default violating behavior (naive <code>datetime.now()</code>, <code>shell=True</code>, <code>print</code> logging…), plus 2–4 constraints with their own deterministic regex checks.</p>
+
+    <div class="arms">
+      <div class="arm arm-cold">
+        <span class="tag">arm 01 · cold</span>
+        <h3>No constraints</h3>
+        <p>The task alone. Measures the baseline violation rate — what the model does when nobody told it anything.</p>
+        <div class="snippet"><b>Task:</b> write the log-rotation helper.</div>
+      </div>
+      <div class="arm arm-mand">
+        <span class="tag">arm 02 · mandated</span>
+        <h3>Constraints as orders</h3>
+        <p>Same task, constraints pasted as explicit instructions. Measures the instruction-following ceiling — what IFEval-style benchmarks test.</p>
+        <div class="snippet"><b>You must use httpx, never requests.</b>
+Task: write the log-rotation helper.</div>
+      </div>
+      <div class="arm arm-incent">
+        <span class="tag">arm 03 · incentivized</span>
+        <h3>Constraints as memory</h3>
+        <p>Same constraints embedded in an ambient project-memory narrative — never imperative. Scenario lint bans "must", "required", "rule". Measures memory adherence.</p>
+        <div class="snippet"><b>The team standardized on httpx after the March socket-exhaustion incident.</b>
+Task: write the log-rotation helper.</div>
+      </div>
+    </div>
+
+    <div class="gap-formula">gap = <b>mandated</b> strict accuracy − <b>incentivized</b> strict accuracy&nbsp;&nbsp;→&nbsp;&nbsp;how much adherence dies when rules live in memory instead of orders</div>
+  </section>
+
+  <!-- ============ 5 · method + limitations ============ -->
+  <section id="method">
+    <p class="kicker">Method &amp; honest limitations</p>
+    <h2>Deterministic by design</h2>
+    <div class="method-grid">
+      <div>
+        <ul class="method-facts">
+          <li><span class="k">scenarios</span><span>35 — seven categories × five: library-choice, security, encoding-io, style-architecture, error-handling, concurrency, logging-testing</span></li>
+          <li><span class="k">scoring</span><span>each constraint carries its own regex checks; strict accuracy (all honored) + per-constraint accuracy (IFEval-style)</span></li>
+          <li><span class="k">judge</span><span>none. No LLM anywhere in scoring or context construction</span></li>
+          <li><span class="k">prompts</span><span>frozen strings, <code>PROMPT_VERSION = "2.0"</code>; incentivized narrative built deterministically from the scenario file</span></li>
+          <li><span class="k">runs</span><span>temperature 0 · 3 runs per arm · 1,260 records · exactly reproducible</span></li>
+        </ul>
+      </div>
+      <div>
+        <h3 style="margin-bottom:1rem;">What a pass does <i>not</i> prove</h3>
+        <ul class="limits">
+          <li><b>Regex checks are conservative.</b> They catch the canonical violation, not every possible one. A pass means "no detected violation".</li>
+          <li><b>Baselines differ by model.</b> The gap metric is within-model; absolute rates are not comparable across models.</li>
+          <li><b>Weak models can fail for competence reasons</b> (broken code), not disobedience. Per-constraint accuracy limits the blast radius; the confound doesn't fully vanish.</li>
+          <li><b>Scenario leakage.</b> Public benchmarks enter training data. Scenarios are versioned, results date-stamped.</li>
+          <li><b>Single-turn generation only.</b> No tool use, no retrieval — isolates adherence from retrieval quality.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6 · run it ============ -->
+  <section id="run">
+    <p class="kicker">Run it / submit a model</p>
+    <h2>~945 calls. Cheap. Reproducible.</h2>
+    <div class="code-block">
+      <button class="copy" data-copy="pip install -e .
+export GROQ_API_KEY=...
+python -m cvb.runner --scenarios scenarios --dry-run
+python -m cvb.runner --scenarios scenarios --runs 3 --json results/out.json
+python -m cvb.report results/out.json --markdown results/out.md">copy</button>
+<pre>pip install -e .
+export GROQ_API_KEY=...   <span class="c"># or any OpenAI-compatible endpoint via --base-url</span>
+
+python -m cvb.runner --scenarios scenarios --dry-run          <span class="c"># list matrix</span>
+python -m cvb.runner --scenarios scenarios --runs 3 \
+    --json results/out.json                                   <span class="c"># ~945 calls</span>
+python -m cvb.report results/out.json --markdown results/out.md</pre>
+    </div>
+    <p class="submit-note">Point it at any OpenAI-compatible endpoint with <code>--base-url</code> / <code>--api-key-env</code>, pick models with <code>--models</code>. To get a model on this leaderboard, open a PR with your <code>out.json</code> — scoring is deterministic, so results are verifiable by re-running.</p>
+  </section>
+
+  <footer>
+    <div class="foot">
+      <span>MIT license</span>
+      <a href="https://github.com/PantheraLabs">PantheraLabs</a>
+      <span>prompt v2.0</span>
+      <span>results 2026-07-30 → 08-02</span>
+      <a href="https://github.com/PantheraLabs/CVB">github.com/PantheraLabs/CVB</a>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var DATA = [
+    { model: "llama-3.1-8b-instant",     cold: 0.229, mandated: 0.914, incentivized: 0.857, gap:  0.057 },
+    { model: "llama-3.3-70b-versatile",  cold: 0.229, mandated: 0.952, incentivized: 0.981, gap: -0.029 },
+    { model: "openai/gpt-oss-120b",      cold: 0.638, mandated: 0.962, incentivized: 0.952, gap:  0.010 },
+    { model: "qwen/qwen3.6-27b",         cold: 0.476, mandated: 1.000, incentivized: 1.000, gap:  0.000 }
+  ];
+
+  /* ---------- leaderboard ---------- */
+  var tbody = document.querySelector("#lb tbody");
+  var sortKey = "incentivized", sortDir = -1;
+
+  function fmt(v) { return v.toFixed(3); }
+  function gapCell(g) {
+    var cls = g > 0 ? "pos" : (g < 0 ? "neg" : "zero");
+    var sign = g > 0 ? "+" : (g < 0 ? "−" : "±");
+    return '<span class="' + cls + '">' + sign + Math.abs(g).toFixed(3) + "</span>";
+  }
+  function render() {
+    var rows = DATA.slice().sort(function (a, b) {
+      var x = a[sortKey], y = b[sortKey];
+      if (typeof x === "string") return sortDir * x.localeCompare(y);
+      return sortDir * (x - y);
+    });
+    tbody.innerHTML = rows.map(function (r) {
+      return "<tr>" +
+        "<td>" + r.model + "</td>" +
+        "<td>" + fmt(r.cold) + "</td>" +
+        "<td>" + fmt(r.mandated) + "</td>" +
+        "<td>" + fmt(r.incentivized) + "</td>" +
+        '<td class="gap">' + gapCell(r.gap) + "</td>" +
+        "</tr>";
+    }).join("");
+    document.querySelectorAll("#lb thead th").forEach(function (th) {
+      th.querySelector(".dir").textContent = th.dataset.k === sortKey ? (sortDir === -1 ? "▾" : "▴") : "";
+    });
+  }
+  document.querySelectorAll("#lb thead th").forEach(function (th) {
+    th.addEventListener("click", function () {
+      var k = th.dataset.k;
+      if (k === sortKey) sortDir = -sortDir;
+      else { sortKey = k; sortDir = k === "model" ? 1 : -1; }
+      render();
+    });
+  });
+  render();
+
+  /* ---------- bar chart (inline SVG) ---------- */
+  var svg = document.getElementById("barchart");
+  var css = getComputedStyle(document.documentElement);
+  var COLORS = {
+    cold: css.getPropertyValue("--cold").trim(),
+    mandated: css.getPropertyValue("--mandated").trim(),
+    incentivized: css.getPropertyValue("--incent").trim()
+  };
+  var ARMS = ["cold", "mandated", "incentivized"];
+
+  var barH = 16, barGap = 6, groupGap = 34, labelH = 22;
+  var groupH = ARMS.length * barH + (ARMS.length - 1) * barGap + labelH;
+  var padL = 8, padR = 64, padT = 6, padB = 30;
+  var W = 860;
+  var plotW = W - padL - padR;
+  var H = padT + DATA.length * groupH + (DATA.length - 1) * groupGap + padB;
+
+  var textDim = css.getPropertyValue("--text-dim").trim();
+  var textFaint = css.getPropertyValue("--text-faint").trim();
+  var hairline = css.getPropertyValue("--hairline").trim();
+  var textC = css.getPropertyValue("--text").trim();
+
+  var s = "";
+  /* gridlines at 0.25 / 0.5 / 0.75 / 1.0 */
+  [0.25, 0.5, 0.75, 1.0].forEach(function (g) {
+    var x = padL + g * plotW;
+    s += '<line x1="' + x + '" y1="' + padT + '" x2="' + x + '" y2="' + (H - padB) + '" stroke="' + hairline + '" stroke-width="1"/>';
+    s += '<text x="' + x + '" y="' + (H - padB + 18) + '" fill="' + textFaint + '" font-size="11" font-family="Space Mono, monospace" text-anchor="middle">' + g.toFixed(2) + "</text>";
+  });
+
+  DATA.forEach(function (d, i) {
+    var gy = padT + i * (groupH + groupGap);
+    s += '<text x="' + padL + '" y="' + (gy + 13) + '" fill="' + textC + '" font-size="13" font-family="Space Mono, monospace">' + d.model + "</text>";
+    ARMS.forEach(function (arm, j) {
+      var y = gy + labelH + j * (barH + barGap);
+      var w = Math.max(d[arm] * plotW, 1.5);
+      s += '<rect x="' + padL + '" y="' + y + '" width="' + w + '" height="' + barH + '" fill="' + COLORS[arm] + '"' + (arm === "cold" ? ' opacity="0.85"' : "") + "/>";
+      s += '<text x="' + (padL + w + 8) + '" y="' + (y + barH - 4) + '" fill="' + textDim + '" font-size="11.5" font-family="Space Mono, monospace">' + d[arm].toFixed(3) + "</text>";
+    });
+  });
+
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  svg.innerHTML = s;
+
+  /* ---------- copy button ---------- */
+  document.querySelectorAll(".copy").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      navigator.clipboard.writeText(btn.dataset.copy).then(function () {
+        btn.textContent = "copied";
+        setTimeout(function () { btn.textContent = "copy"; }, 1400);
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>
